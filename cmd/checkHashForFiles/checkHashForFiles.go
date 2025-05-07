@@ -40,7 +40,7 @@ func parseFileContent(content []byte) ([]FileEntry, error) {
 		}
 
 		// Split the line into hash and file path by the first space
-		parts := strings.SplitN(line, " ", 2)
+		parts := strings.SplitN(line, "  ", 2)
 
 		if len(parts) != 2 {
 			// Log a warning or return an error for lines that don't match the format
@@ -74,7 +74,6 @@ func GetSHA256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
@@ -92,10 +91,10 @@ func GetSHA256(path string) (string, error) {
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
-		fmt.Println("💥 💥 Please provide the path to the directory containing the files hash as first argument ")
-		return
+		fmt.Println("💥 💥 Please provide the path to the file containing the hash as first argument ")
+		os.Exit(1)
 	}
-	fmt.Printf("✅ Number of arguments received : %d\n", len(args))
+	fmt.Printf("ℹ️ Number of arguments received : %d\n", len(args))
 	//get the first argument with the file path containing the hash
 	hashFilePath := flag.String("hashFilePath", "", "The path to the file containing the hash")
 	flag.Parse()
@@ -103,15 +102,15 @@ func main() {
 		*hashFilePath = args[0]
 	}
 
-	fmt.Printf("✅ checking if file exist : %s\n", *hashFilePath)
+	fmt.Printf("🏴󠁲󠁯󠁩󠁦󠁿 checking if file exist : %s\n", *hashFilePath)
 	if _, err := os.Stat(*hashFilePath); os.IsNotExist(err) {
 		fmt.Printf("💥 💥 File not found : %s\n", *hashFilePath)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Reading file : %s\n", *hashFilePath)
+	fmt.Printf("✅ Opening file : %s\n", *hashFilePath)
 	file, err := os.Open(*hashFilePath)
 	if err != nil {
-		fmt.Printf("💥 💥 Error reading file : %s\n", err)
+		fmt.Printf("💥 💥 Error opening file : %s\n", err)
 		os.Exit(1)
 	}
 	defer func(file *os.File) {
@@ -127,9 +126,9 @@ func main() {
 	}
 	fmt.Printf("✅ File read successfully : %s\n", *hashFilePath)
 
-	// storing basepath of hash
+	// Storing basepath of hash file
 	basePath := filepath.Dir(*hashFilePath)
-	fmt.Printf("✅ Base path of hash file : %s\n", basePath)
+	fmt.Printf("ℹ️ Base path of hash file : %s\n", basePath)
 
 	// Parse the byte slice into a slice of FileEntry structs
 	entries, err := parseFileContent(fileContent)
@@ -139,25 +138,28 @@ func main() {
 
 	// Now 'entries' is a slice of FileEntry structs containing your data
 	fmt.Printf("✅ Successfully parsed %d entries.\n", len(entries))
-
-	// Example of accessing the parsed data:
 	if len(entries) > 0 {
-		fmt.Printf("First entry - Hash: %s, FilePath: %s\n", entries[0].Hash, entries[0].FilePath)
-		fullPath := filepath.Join(basePath, strings.TrimSpace(entries[0].FilePath))
-		hash, err := GetSHA256(fullPath)
-		if err != nil {
-			fmt.Printf("💥 💥 Error getting hash : %s\n", err)
-			os.Exit(1)
+		numValidHash := 0
+		numInvalidHash := 0
+		// iterate over all entries
+		for _, entry := range entries {
+			//fmt.Printf("Hash: %s, FilePath: %s\n", entry.Hash, entry.FilePath)
+			fullPath := filepath.Join(basePath, entry.FilePath)
+			hash, err := GetSHA256(fullPath)
+			if err != nil {
+				fmt.Printf("💥 💥 Error getting hash : %s\n", err)
+				os.Exit(1)
+			}
+			// fmt.Printf("✅ Successfully got hash : %s\n", hash)
+			// comparing hash values
+			if hash == entry.Hash {
+				numValidHash++
+				//fmt.Printf("✅ \t%s\n", entry.FilePath)
+			} else {
+				numInvalidHash++
+				fmt.Printf("❌⚠️🔥 Hash values do not match for:\t%s\texpecting:\t%s\tgot:\t%s\n", entry.FilePath, entry.Hash, hash)
+			}
 		}
-		fmt.Printf("✅ Successfully got hash : %s\n", hash)
-		// comparing hash values
-		if hash == entries[0].Hash {
-			fmt.Printf("✅ Hash values match\n")
-		} else {
-			fmt.Printf("❎⚠️ Hash values do not match\n")
-		}
+		fmt.Printf("✅ File contains %d lines, %d valid hashes and %d invalid hashes.\n", len(entries), numValidHash, numInvalidHash)
 	}
-
-	fmt.Printf("✅ File contains %d lines\n", len(entries))
-
 }
