@@ -11,12 +11,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // FileEntry represents a single line with a hash and file path.
 type FileEntry struct {
 	Hash     string
 	FilePath string
+}
+
+// Result struct to collect output from goroutines
+type Result struct {
+	IsValid  bool   // Whether the hash matched
+	FilePath string // File path
+	Message  string // Error or mismatch message, if any
 }
 
 // parseFileContent converts a byte slice into a slice of FileEntry structs.
@@ -139,27 +147,57 @@ func main() {
 	// Now 'entries' is a slice of FileEntry structs containing your data
 	fmt.Printf("✅ Successfully parsed %d entries.\n", len(entries))
 	if len(entries) > 0 {
+		var wg sync.WaitGroup
+		resultChan := make(chan Result, len(entries)) // Buffered channel to collect results
 		numValidHash := 0
 		numInvalidHash := 0
-		// iterate over all entries
+		//  Limit concurrency with a worker pool
+		const maxWorkers = 20 // Adjust based on system resources
+		semaphore := make(chan struct{}, maxWorkers)
+
+		// Process each entry in a goroutine
 		for _, entry := range entries {
-			//fmt.Printf("Hash: %s, FilePath: %s\n", entry.Hash, entry.FilePath)
-			fullPath := filepath.Join(basePath, entry.FilePath)
-			hash, err := GetSHA256(fullPath)
-			if err != nil {
-				fmt.Printf("💥 💥 Error getting hash : %s\n", err)
-				os.Exit(1)
+			wg.Add(1)
+			go func(entry FileEntry) {
+				defer wg.Done()
+
+				// Acquire semaphore slot (limits concurrent goroutines)
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+				//fmt.Printf("Hash: %s, FilePath: %s\n", entry.Hash, entry.FilePath)
+				fullPath := filepath.Join(basePath, entry.FilePath)
+				hash, err := GetSHA256(fullPath)
+				result := Result{}
+				if err != nil {
+					result.Message = fmt.Sprintf("💥 💥 Error getting hash : %s\n", err)
+				} else if hash == entry.Hash {
+					result.IsValid = true
+				} else {
+					result.Message = fmt.Sprintf("❌ ⚠️ 🔥 Hash values do not match for:\t%s\texpecting:\t%s\tgot:\t%s\n", entry.FilePath, entry.Hash, hash)
+					result.IsValid = false
+					result.FilePath = entry.FilePath
+				}
+				resultChan <- result
+			}(entry)
+		}
+		// Close result channel after all goroutines finish
+		go func() {
+			wg.Wait()
+			close(resultChan)
+		}()
+
+		// Collect results from the channel
+		for result := range resultChan {
+			if result.Message != "" {
+				fmt.Print(result.Message)
 			}
-			// fmt.Printf("✅ Successfully got hash : %s\n", hash)
-			// comparing hash values
-			if hash == entry.Hash {
+			if result.IsValid {
 				numValidHash++
-				//fmt.Printf("✅ \t%s\n", entry.FilePath)
 			} else {
 				numInvalidHash++
-				fmt.Printf("❌⚠️🔥 Hash values do not match for:\t%s\texpecting:\t%s\tgot:\t%s\n", entry.FilePath, entry.Hash, hash)
 			}
 		}
+
 		fmt.Printf("✅ File contains %d lines, %d valid hashes and %d invalid hashes.\n", len(entries), numValidHash, numInvalidHash)
 	}
 }
