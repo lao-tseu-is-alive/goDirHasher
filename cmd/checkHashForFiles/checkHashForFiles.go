@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"flag"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 )
+
+const defaultMaxWorkers = 15
 
 // FileEntry represents a single line with a hash and file path.
 type FileEntry struct {
@@ -22,9 +25,8 @@ type FileEntry struct {
 
 // Result struct to collect output from goroutines
 type Result struct {
-	IsValid  bool   // Whether the hash matched
-	FilePath string // File path
-	Message  string // Error or mismatch message, if any
+	IsValid bool   // Whether the hash matched
+	Message string // Error or mismatch message, if any
 }
 
 // parseFileContent converts a byte slice into a slice of FileEntry structs.
@@ -76,23 +78,58 @@ func parseFileContent(content []byte) ([]FileEntry, error) {
 	return entries, nil
 }
 
+// hashPool holds reusable SHA-256 hash instances.
+var hashPool = sync.Pool{
+	New: func() any {
+		// On pool miss, allocate a fresh hasher.
+		return sha256.New()
+	},
+}
+
+// Buffer pool for I/O operations
+var bufferPool = sync.Pool{
+	New: func() any {
+		return make([]byte, 64*1024) // 64KB buffer, adjustable
+	},
+}
+
 // GetSHA256 returns sha256 hash of a file
 func GetSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			fmt.Printf("💥 💥 File not found : %v\n", err)
+	/*
+		defer func(f *os.File) {
+			err := f.Close()
+			if err != nil {
+				fmt.Printf("💥 💥 File not found : %v\n", err)
+			}
+		}(f)
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			return "", err
 		}
-	}(f)
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Sprintf("%x", h.Sum(nil)), nil
+	*/
+	defer f.Close()
+	// Retrieve a hasher from the pool (or New() if empty)
+	h := hashPool.Get().(hash.Hash)
+	// Reset its internal state before reuse
+	h.Reset()
+	// Return it to the pool when done
+	defer hashPool.Put(h)
+
+	// Wrap in a buffered reader to reduce syscalls
+	br := bufio.NewReader(f)
+	buf := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buf)
+	if _, err := io.CopyBuffer(h, br, buf); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	// Compute checksum
+	sum := h.Sum(nil)
+	return fmt.Sprintf("%x", sum), nil
 }
 
 // this will generate hash for all files in the given directory and compare
@@ -105,11 +142,20 @@ func main() {
 	fmt.Printf("ℹ️ Number of arguments received : %d\n", len(args))
 	//get the first argument with the file path containing the hash
 	hashFilePath := flag.String("hashFilePath", "", "The path to the file containing the hash")
+	var maxWorkers int
+	flag.IntVar(&maxWorkers, "workers", defaultMaxWorkers, "Number of concurrent workers")
 	flag.Parse()
+	// Ensure maxWorkers is reasonable
+	if maxWorkers < 1 {
+		maxWorkers = defaultMaxWorkers
+	}
+	if maxWorkers > 50 {
+		maxWorkers = 50
+	}
 	if *hashFilePath == "" && len(args) == 1 {
 		*hashFilePath = args[0]
 	}
-
+	fmt.Printf("ℹ️ Using maxWorkers = %d \n", maxWorkers)
 	fmt.Printf("🏴󠁲󠁯󠁩󠁦󠁿 checking if file exist : %s\n", *hashFilePath)
 	if _, err := os.Stat(*hashFilePath); os.IsNotExist(err) {
 		fmt.Printf("💥 💥 File not found : %s\n", *hashFilePath)
@@ -152,7 +198,6 @@ func main() {
 		numValidHash := 0
 		numInvalidHash := 0
 		//  Limit concurrency with a worker pool
-		const maxWorkers = 20 // Adjust based on system resources
 		semaphore := make(chan struct{}, maxWorkers)
 
 		// Process each entry in a goroutine
@@ -160,27 +205,23 @@ func main() {
 			wg.Add(1)
 			go func(entry FileEntry) {
 				defer wg.Done()
-
 				// Acquire semaphore slot (limits concurrent goroutines)
 				semaphore <- struct{}{}
 				defer func() { <-semaphore }()
-				//fmt.Printf("Hash: %s, FilePath: %s\n", entry.Hash, entry.FilePath)
 				fullPath := filepath.Join(basePath, entry.FilePath)
-				hash, err := GetSHA256(fullPath)
+				fileHash, err := GetSHA256(fullPath)
 				result := Result{}
 				if err != nil {
 					result.Message = fmt.Sprintf("💥 💥 Error getting hash : %s\n", err)
-				} else if hash == entry.Hash {
+				} else if fileHash == entry.Hash {
 					result.IsValid = true
 				} else {
-					result.Message = fmt.Sprintf("❌ ⚠️ 🔥 Hash values do not match for:\t%s\texpecting:\t%s\tgot:\t%s\n", entry.FilePath, entry.Hash, hash)
-					result.IsValid = false
-					result.FilePath = entry.FilePath
+					result.Message = fmt.Sprintf("❌ ⚠️ 🔥 Hash values do not match for:\t%s\texpecting:\t%s\tgot:\t%s\n", entry.FilePath, entry.Hash, fileHash)
 				}
 				resultChan <- result
 			}(entry)
 		}
-		// Close result channel after all goroutines finish
+		// Close the result channel after all goroutines finish
 		go func() {
 			wg.Wait()
 			close(resultChan)
