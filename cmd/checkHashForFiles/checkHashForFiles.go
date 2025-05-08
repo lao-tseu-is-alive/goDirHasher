@@ -3,14 +3,15 @@ package main
 import (
 	"bufio"
 	"crypto/md5"
-	"crypto/sha256"
 	"flag"
 	"fmt"
+	"github.com/minio/sha256-simd"
 	"hash"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"sync"
 )
@@ -102,21 +103,19 @@ func GetSHA256(path string) (string, error) {
 	}
 	defer f.Close()
 	// Retrieve a hasher from the pool (or New() if empty)
-	h := sha256HashPool.Get().(hash.Hash)
+	shaWriter := sha256HashPool.Get().(hash.Hash)
 	// Reset its internal state before reuse
-	h.Reset()
+	shaWriter.Reset()
 	// Return it to the pool when done
-	defer sha256HashPool.Put(h)
-
+	defer sha256HashPool.Put(shaWriter)
 	// Wrap in a buffered reader to reduce syscalls
 	br := bufio.NewReader(f)
 	buf := bufferPool.Get().([]byte)
 	defer bufferPool.Put(buf)
-	if _, err := io.CopyBuffer(h, br, buf); err != nil {
+	if _, err := io.CopyBuffer(shaWriter, br, buf); err != nil {
 		return "", err
 	}
-	// Compute checksum
-	sum := h.Sum(nil)
+	sum := shaWriter.Sum(nil)
 	return fmt.Sprintf("%X", sum), nil
 }
 
@@ -128,9 +127,13 @@ func displayUsageAndExit() {
 }
 
 // this will generate hash for all files in the given directory and compare
+// example run :
+// ./checkSha256HashForFiles -workers=10 -cpuprofile=cpu.prof -memprofile=mem.prof -hashFilePath=test_hash/sha256_output.txt
 func main() {
 	//get the first argument with the file path containing the hash
 	hashFilePath := flag.String("hashFilePath", "", "The path to the file containing the hash")
+	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file")
+	memProfile := flag.String("memprofile", "", "Write memory profile to file")
 	var maxWorkers int
 	flag.IntVar(&maxWorkers, "workers", defaultMaxWorkers, "Number of concurrent workers")
 	flag.Parse()
@@ -156,6 +159,20 @@ func main() {
 	} else if *hashFilePath == "" && len(args) > 1 {
 		displayUsageAndExit()
 	}
+
+	// Start CPU profiling if requested
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatalf("Could not create CPU profile: %v", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatalf("Could not start CPU profile: %v", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	fmt.Printf("ℹ️ Using maxWorkers = %d \n", maxWorkers)
 	fmt.Printf("🏴󠁲󠁯󠁩󠁦󠁿 checking if file exist : %s\n", *hashFilePath)
 	if _, err := os.Stat(*hashFilePath); os.IsNotExist(err) {
@@ -232,7 +249,17 @@ func main() {
 				numInvalidHash++
 			}
 		}
-
 		fmt.Printf("✅ File contains %d lines, %d valid hashes and %d invalid hashes.\n", len(entries), numValidHash, numInvalidHash)
+		// Write a memory profile if requested
+		if *memProfile != "" {
+			f, err := os.Create(*memProfile)
+			if err != nil {
+				log.Fatalf("Could not create memory profile: %v", err)
+			}
+			defer f.Close()
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				log.Fatalf("Could not write memory profile: %v", err)
+			}
+		}
 	}
 }
