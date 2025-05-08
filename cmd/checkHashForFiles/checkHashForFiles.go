@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"bytes"
+	"crypto/md5"
 	"crypto/sha256"
 	"flag"
 	"fmt"
@@ -31,10 +31,9 @@ type Result struct {
 
 // parseFileContent converts a byte slice into a slice of FileEntry structs.
 // Each line is expected to be in the format "hash filepath".
-func parseFileContent(content []byte) ([]FileEntry, error) {
+func parseFileContent(file *os.File) ([]FileEntry, error) {
 	var entries []FileEntry
-	byteReader := bytes.NewReader(content)
-	scanner := bufio.NewScanner(byteReader)
+	scanner := bufio.NewScanner(file)
 
 	// Set the scanner to split by lines
 	scanner.Split(bufio.ScanLines)
@@ -43,43 +42,31 @@ func parseFileContent(content []byte) ([]FileEntry, error) {
 	for scanner.Scan() {
 		lineNumber++
 		line := scanner.Text()
-
 		// Skip empty lines
 		if len(strings.TrimSpace(line)) == 0 {
 			continue
 		}
-
 		// Split the line into hash and file path by the first space
 		parts := strings.SplitN(line, "  ", 2)
-
 		if len(parts) != 2 {
-			// Log a warning or return an error for lines that don't match the format
 			log.Printf("Warning: Skipping line %d due to incorrect format: %s\n", lineNumber, line)
 			continue
-			// Or, if you want to treat malformed lines as a fatal error:
-			// return nil, fmt.Errorf("line %d has incorrect format: %s", lineNumber, line)
 		}
-
-		hash := parts[0]
-		filePath := parts[1]
-
 		// Create a FileEntry struct and append it to the slice
 		entries = append(entries, FileEntry{
-			Hash:     hash,
-			FilePath: filePath,
+			Hash:     strings.ToUpper(parts[0]),
+			FilePath: parts[1],
 		})
 	}
-
 	// Check for errors during scanning
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading lines: %w", err)
 	}
-
 	return entries, nil
 }
 
-// hashPool holds reusable SHA-256 hash instances.
-var hashPool = sync.Pool{
+// sha256HashPool holds reusable SHA-256 hash instances.
+var sha256HashPool = sync.Pool{
 	New: func() any {
 		// On pool miss, allocate a fresh hasher.
 		return sha256.New()
@@ -93,32 +80,33 @@ var bufferPool = sync.Pool{
 	},
 }
 
+// GetMD5 returns md5 hash of a file
+func GetMD5(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%X", h.Sum(nil)), nil
+}
+
 // GetSHA256 returns sha256 hash of a file
 func GetSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	/*
-		defer func(f *os.File) {
-			err := f.Close()
-			if err != nil {
-				fmt.Printf("💥 💥 File not found : %v\n", err)
-			}
-		}(f)
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%x", h.Sum(nil)), nil
-	*/
 	defer f.Close()
 	// Retrieve a hasher from the pool (or New() if empty)
-	h := hashPool.Get().(hash.Hash)
+	h := sha256HashPool.Get().(hash.Hash)
 	// Reset its internal state before reuse
 	h.Reset()
 	// Return it to the pool when done
-	defer hashPool.Put(h)
+	defer sha256HashPool.Put(h)
 
 	// Wrap in a buffered reader to reduce syscalls
 	br := bufio.NewReader(f)
@@ -129,22 +117,33 @@ func GetSHA256(path string) (string, error) {
 	}
 	// Compute checksum
 	sum := h.Sum(nil)
-	return fmt.Sprintf("%x", sum), nil
+	return fmt.Sprintf("%X", sum), nil
+}
+
+func displayUsageAndExit() {
+	fmt.Printf("💥 💥 Missing arguments, Usage : %s\n", os.Args[0])
+	flag.PrintDefaults()
+	fmt.Println("💥 💥 Please provide at least the path to the file containing the hash as first argument ")
+	os.Exit(1)
 }
 
 // this will generate hash for all files in the given directory and compare
 func main() {
-	args := os.Args[1:]
-	if len(args) == 0 {
-		fmt.Println("💥 💥 Please provide the path to the file containing the hash as first argument ")
-		os.Exit(1)
-	}
-	fmt.Printf("ℹ️ Number of arguments received : %d\n", len(args))
 	//get the first argument with the file path containing the hash
 	hashFilePath := flag.String("hashFilePath", "", "The path to the file containing the hash")
 	var maxWorkers int
 	flag.IntVar(&maxWorkers, "workers", defaultMaxWorkers, "Number of concurrent workers")
 	flag.Parse()
+	args := os.Args[1:]
+	if len(args) == 0 {
+		displayUsageAndExit()
+	}
+	if len(args) < 1 {
+		fmt.Println("💥 💥 Please provide at least the path to the file containing the hash as first argument ")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	fmt.Printf("ℹ️ Number of arguments received : %d\n", len(args))
 	// Ensure maxWorkers is reasonable
 	if maxWorkers < 1 {
 		maxWorkers = defaultMaxWorkers
@@ -154,6 +153,8 @@ func main() {
 	}
 	if *hashFilePath == "" && len(args) == 1 {
 		*hashFilePath = args[0]
+	} else if *hashFilePath == "" && len(args) > 1 {
+		displayUsageAndExit()
 	}
 	fmt.Printf("ℹ️ Using maxWorkers = %d \n", maxWorkers)
 	fmt.Printf("🏴󠁲󠁯󠁩󠁦󠁿 checking if file exist : %s\n", *hashFilePath)
@@ -173,19 +174,11 @@ func main() {
 			fmt.Printf("💥 💥 Error closing file : %s\n", err)
 		}
 	}(file)
-	fileContent, err := io.ReadAll(file)
-	if err != nil {
-		fmt.Printf("💥 💥 Error reading file : %s\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("✅ File read successfully : %s\n", *hashFilePath)
-
-	// Storing basepath of hash file
+	// Storing basepath of the file
 	basePath := filepath.Dir(*hashFilePath)
 	fmt.Printf("ℹ️ Base path of hash file : %s\n", basePath)
-
 	// Parse the byte slice into a slice of FileEntry structs
-	entries, err := parseFileContent(fileContent)
+	entries, err := parseFileContent(file)
 	if err != nil {
 		log.Fatalf("Error parsing file content: %v", err)
 	}
@@ -210,6 +203,7 @@ func main() {
 				defer func() { <-semaphore }()
 				fullPath := filepath.Join(basePath, entry.FilePath)
 				fileHash, err := GetSHA256(fullPath)
+				//fileHash, err := GetMD5(fullPath)
 				result := Result{}
 				if err != nil {
 					result.Message = fmt.Sprintf("💥 💥 Error getting hash : %s\n", err)

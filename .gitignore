@@ -23,7 +23,7 @@ go.work.sum
 
 # env file
 .env
-test_md5
+test_hash
 
 
 # jetbrain ide
