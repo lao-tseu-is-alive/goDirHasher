@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  release:
+    types: [created] # This workflow runs when a new release is created
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ubuntu-latest # Use ubuntu-latest to build, as it supports cross-compilation
+
+    strategy:
+      matrix:
+        # Define the target operating systems and architectures
+        os: [linux, windows, darwin]
+        arch: [amd64] # You can add other architectures like arm64 if needed
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 # Action to checkout your repository code
+
+      - name: Setup Go
+        uses: actions/setup-go@v5 # Action to set up the Go environment
+        with:
+          go-version: '1.24' # Specify the Go version you want to use (adjust if needed)
+
+      - name: Build
+        run: |
+          # Set environment variables for cross-compilation
+          # GOOS: target operating system
+          # GOARCH: target architecture
+          # CGO_ENABLED=0: Disable CGO for static linking (recommended for portability)
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }} .
+        shell: bash # Ensure bash is used for running the build command
+
+      - name: Archive for Linux/macOS
+        if: matrix.os != 'windows' # Only run for non-Windows builds
+        run: |
+          # Create a tar.gz archive of the executable
+          tar -czvf goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz goDirHasher-${{ matrix.os }}-${{ matrix.arch }}
+        shell: bash
+
+      - name: Archive for Windows
+        if: matrix.os == 'windows' # Only run for Windows builds
+        run: |
+          # Create a zip archive of the executable
+          zip goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.zip goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.exe
+        shell: bash
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2 # Action to upload assets to the GitHub Release
+        with:
+          files: |
+            goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided by GitHub Actions
+
