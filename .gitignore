@@ -28,3 +28,11 @@ test_hash
 
 # jetbrain ide
 .idea
+/checkSha256HashForFiles
+/cpu.prof
+/cpuAVX.prof
+/Godoc/
+/mem.prof
+/memAVX.prof
+/test_sha256.txt
+/Godoc/
