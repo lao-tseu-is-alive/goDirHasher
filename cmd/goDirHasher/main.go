@@ -51,7 +51,7 @@ func displayUsageAndExit() {
 }
 
 func main() {
-	log.Printf("🚀🚀 Starting App:'%s', ver:%s, from: %s\n", version.APP, version.VERSION, version.REPOSITORY)
+	fmt.Printf("🚀 Starting App:'%s', ver:%s, from: %s\n", version.APP, version.VERSION, version.REPOSITORY)
 
 	// Command-line flags
 	checkMode := flag.Bool("c", false, "Check hashes against a file (or stdin)")
