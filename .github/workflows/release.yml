@@ -30,7 +30,7 @@ jobs:
           # GOOS: target operating system
           # GOARCH: target architecture
           # CGO_ENABLED=0: Disable CGO for static linking (recommended for portability)
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }} .
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }} ./cmd/goDirHasher/main.go
         shell: bash # Ensure bash is used for running the build command
 
       - name: Archive for Linux/macOS
