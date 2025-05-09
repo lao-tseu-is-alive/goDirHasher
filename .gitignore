@@ -31,8 +31,9 @@ test_hash
 /checkSha256HashForFiles
 /cpu.prof
 /cpuAVX.prof
-/Godoc/
+/Godoc
 /mem.prof
 /memAVX.prof
 /test_sha256.txt
-/Godoc/
+/goDirHasher
+/test
