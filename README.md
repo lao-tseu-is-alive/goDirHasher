@@ -11,7 +11,9 @@ and hashing features and optimized hashing libraries for performance.
 Testing this with a set of 70'000 files for a 35 GigaByte.
 
  **6.3 seconds with goDirHasher, versus 78.5 seconds** 
- with the standard sha256sum command. **That's 12 times faster !**
+ with the standard sha256sum command. 
+ 
+**That's 12 times faster !**
 
 ```bash
   cgil@pulsar:~/cgdev/golang/goDirHasher$ du -hs Godoc/
