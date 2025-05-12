@@ -4,6 +4,9 @@ on:
   release:
     types: [created] # This workflow runs when a new release is created
 
+permissions:
+  contents: write # Grant write access to repository contents
+
 jobs:
   build:
     name: Build for ${{ matrix.os }} ${{ matrix.arch }}
