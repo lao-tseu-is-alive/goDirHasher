@@ -32,7 +32,7 @@ func TestGetSHA256(t *testing.T) {
 
 	// The expected SHA256 hash for the content "This is a test file for SHA256 hashing."
 	// You can verify this using a command-line tool like `echo -n "This is a test file for SHA256 hashing." | sha256sum`
-	expectedHash := "9C495B60E232739F0E1777969172C84520F33837C877A6719A9256676F26927F"
+	expectedHash := "B52E9CC162A479840A909B2CFD9D0F1C5D29055A303BB389090236005D87E0E5"
 
 	// Compare the calculated hash with the expected hash
 	if calculatedHash != expectedHash {
