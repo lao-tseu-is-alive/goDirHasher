@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write # Grant write access to repository contents
+  actions: read # Grant read access to repository actions
 
 jobs:
   build:
@@ -21,11 +22,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4 # Action to checkout your repository code
-
       - name: Setup Go
         uses: actions/setup-go@v5 # Action to set up the Go environment
         with:
-          go-version: '1.24' # Specify the Go version you want to use (adjust if needed)
+          go-version: '1.24.3' # Specify the Go version you want to use
+      - run: go version
 
       - name: Build for Linux/macOS
         if: matrix.os != 'windows' # Only run for non-Windows builds
@@ -35,30 +36,21 @@ jobs:
           # GOARCH: target architecture
           # CGO_ENABLED=0: Disable CGO for static linking (recommended for portability)
           GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }} ./cmd/goDirHasher/main.go
-        shell: bash # Ensure bash is used for running the build command
       - name: Build for Windows
         if: matrix.os == 'windows' # Only run for Windows builds
         run: |
-          # Set environment variables for cross-compilation
-          # GOOS: target operating system
-          # GOARCH: target architecture
-          # CGO_ENABLED=0: Disable CGO for static linking (recommended for portability)
           GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.exe ./cmd/goDirHasher/main.go
-        shell: bash # Ensure bash is used for running the build command
 
       - name: Archive for Linux/macOS
         if: matrix.os != 'windows' # Only run for non-Windows builds
         run: |
-          # Create a tar.gz archive of the executable
           tar -czvf goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz goDirHasher-${{ matrix.os }}-${{ matrix.arch }}
-        shell: bash
 
       - name: Archive for Windows
         if: matrix.os == 'windows' # Only run for Windows builds
         run: |
           # Create a zip archive of the executable
           zip goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.zip goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.exe
-        shell: bash
 
       - name: Calculate Sha256 hash
         run: |
@@ -66,28 +58,20 @@ jobs:
 
       - name: Upload Release Asset for Linux/macOS
         if: matrix.os != 'windows' # Only run for non-Windows builds
-        uses: softprops/action-gh-release@v2 # Action to upload assets to the GitHub Release
+        uses: softprops/action-gh-release@v2.2.2
         with:
           files: |
             goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            SHA256.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided by GitHub Actions
 
       - name: Upload Release Asset for Windows
         if: matrix.os == 'windows' # Only run for non-Windows builds
-        uses: softprops/action-gh-release@v2 # Action to upload assets to the GitHub Release
+        uses: softprops/action-gh-release@v2.2.2 # Action to upload assets to the GitHub Release
         with:
-          files: |
+          files:
             goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided by GitHub Actions
-
-      - name: Upload SHA256.txt hash
-        uses: softprops/action-gh-release@v2 # Action to upload assets to the GitHub Release
-        with:
-          files: |
-            SHA256.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided by GitHub Actions
-
 
