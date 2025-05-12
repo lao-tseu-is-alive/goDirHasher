@@ -3,6 +3,7 @@ package hasher
 import (
 	"bufio"
 	"crypto/md5" // Keeping MD5 for now, but focus is on SHA256
+	"crypto/sha256"
 	"fmt"
 	"hash"
 	"io"
@@ -10,8 +11,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/minio/sha256-simd" // Using the faster sha256 implementation
 )
 
 // FileEntry represents a single line with a hash and file path.

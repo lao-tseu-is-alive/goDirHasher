@@ -19,7 +19,7 @@ Testing this with a set of 70'000 files for a 35 GigaByte.
   cgil@pulsar:~/cgdev/golang/goDirHasher$ du -hs Godoc/
   38G	Godoc/
   
-  cgil@pulsar:~/cgdev/golang/goDirHasher$ /usr/bin/time -f "%es" ./goDirHasher -workers 25 -o SHA256.txt Godoc/*
+  cgil@pulsar:~/cgdev/golang/goDirHasher$ /usr/bin/time -f "%es" ./goDirHasher-linux-amd64 -workers 25 -o SHA256.txt Godoc/*
   2025/05/09 11:26:52 🚀🚀 Starting App:'goDirHasher', ver:0.1.0, from: https://github.com/lao-tseu-is-alive/goDirHasher
   ℹ️ Using maxWorkers = 25 
   🔢 Entering calculate mode...
