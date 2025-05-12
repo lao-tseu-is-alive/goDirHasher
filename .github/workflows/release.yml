@@ -4,12 +4,12 @@ on:
   push:
     # Publish semver tags as releases.
     tags: [ 'v[0-9]+.[0-9]+.[0-9]+' ]
-  release:
-    types: [created] # This workflow runs when a new release is created
+
 
 permissions:
   contents: write # Grant write access to repository contents
   actions: read # Grant read access to repository actions
+  discussions: read # Grant read access to repository discussions
 
 jobs:
   build:
@@ -63,18 +63,10 @@ jobs:
         if: matrix.os != 'windows' # Only run for non-Windows builds
         uses: softprops/action-gh-release@v2.2.2
         with:
+          body:  Release${{ env.RELEASE_VERSION }}
           files: |
             goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            goDirHasher-windows-amd64.zip
             SHA256.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided by GitHub Actions
-
-      - name: Upload Release Asset for Windows
-        if: matrix.os == 'windows' # Only run for non-Windows builds
-        uses: softprops/action-gh-release@v2.2.2 # Action to upload assets to the GitHub Release
-        with:
-          files:
-            goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided by GitHub Actions
-
