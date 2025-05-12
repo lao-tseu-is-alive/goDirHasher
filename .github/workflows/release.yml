@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    # Publish semver tags as releases.
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+' ]
   release:
     types: [created] # This workflow runs when a new release is created
 
