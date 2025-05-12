@@ -52,7 +52,9 @@ Testing this with a set of 70'000 files for a 35 GigaByte.
 * **Profiling:** Built-in support for CPU and memory profiling to help identify performance bottlenecks.
 
 ## **🛠️ Installation**
-
+### **Download from github**
+You can just download the latest release for your operating system from [GitHub releases](https://github.com/lao-tseu-is-alive/goDirHasher/releases)
+### **Using go get**
 To install goDirHasher, make sure you have Go installed on your system. Then, you can use go install:
 
 go install github.com/lao-tseu-is-alive/goDirHasher@latest
