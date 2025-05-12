@@ -16,12 +16,6 @@ jobs:
     name: Build for ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ubuntu-latest # Use ubuntu-latest to build, as it supports cross-compilation
 
-    strategy:
-      matrix:
-        # Define the target operating systems and architectures
-        os: [linux, windows, darwin]
-        arch: [amd64] # You can add other architectures like arm64 if needed
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4 # Action to checkout your repository code
@@ -31,41 +25,33 @@ jobs:
           go-version: '1.24.3' # Specify the Go version you want to use
       - run: go version
 
-      - name: Build for Linux/macOS
-        if: matrix.os != 'windows' # Only run for non-Windows builds
+      - name: Build
         run: |
           # Set environment variables for cross-compilation
           # GOOS: target operating system
           # GOARCH: target architecture
           # CGO_ENABLED=0: Disable CGO for static linking (recommended for portability)
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }} ./cmd/goDirHasher/main.go
-      - name: Build for Windows
-        if: matrix.os == 'windows' # Only run for Windows builds
-        run: |
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.exe ./cmd/goDirHasher/main.go
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-linux-amd64 ./cmd/goDirHasher/main.go 
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-windows-amd64.exe ./cmd/goDirHasher/main.go
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-darwin-amd64 ./cmd/goDirHasher/main.go
 
-      - name: Archive for Linux/macOS
-        if: matrix.os != 'windows' # Only run for non-Windows builds
+      - name: Create Archives
         run: |
-          tar -czvf goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz goDirHasher-${{ matrix.os }}-${{ matrix.arch }}
-
-      - name: Archive for Windows
-        if: matrix.os == 'windows' # Only run for Windows builds
-        run: |
-          # Create a zip archive of the executable
-          zip goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.zip goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.exe
+          tar -czvf goDirHasher-linux-amd64.tar.gz goDirHasher-linux-amd64
+          tar -czvf goDirHasher-darwin-amd64.tar.gz goDirHasher-darwin-amd64
+          zip goDirHasher-windows-amd64.zip goDirHasher-windows-amd64.exe
 
       - name: Calculate Sha256 hash
         run: |
           sha256sum goDirHasher-* > SHA256.txt
 
       - name: Upload Release Asset for Linux/macOS
-        if: matrix.os != 'windows' # Only run for non-Windows builds
         uses: softprops/action-gh-release@v2.2.2
         with:
           body:  Release${{ env.RELEASE_VERSION }}
           files: |
-            goDirHasher-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            goDirHasher-linux-amd64.tar.gz
+            goDirHasher-darwin-amd64.tar.gz
             goDirHasher-windows-amd64.zip
             SHA256.txt
         env:
