@@ -20,7 +20,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4 # Action to checkout your repository code
       - name: Set env
-        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: |
+          echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+          echo "REVISION=$(git describe --dirty --always)" >> $GITHUB_ENV
+          echo "NOW=$(date +%Y-%m-%dT%T)" >> $GITHUB_ENV
+          echo "APP_REPOSITORY=github.com/${GITHUB_REPOSITORY}" >> $GITHUB_ENV
+      - name: Compose LDFLAGS
+        run: |
+          LDFLAGS="-s -w -X ${APP_REPOSITORY}/pkg/version.BuildStamp=${NOW} -X ${APP_REPOSITORY}/pkg/version.REVISION=${REVISION}"
+          echo "LDFLAGS=$LDFLAGS" >> $GITHUB_ENV
+        env:
+          APP_REPOSITORY: ${{ env.APP_REPOSITORY }}
+          NOW: ${{ env.NOW }}
+          REVISION: ${{ env.REVISION }}
+
+      - name: Show LDFLAGS
+        run: echo "$LDFLAGS"
+        env:
+          LDFLAGS: ${{ env.LDFLAGS }}
+
       - name: Preparing Test Env
         run: |
           echo $RELEASE_VERSION
@@ -28,7 +46,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5 # Action to set up the Go environment
         with:
-          go-version: '1.24.3' # Specify the Go version you want to use
+          go-version: '1.24.4' # Specify the Go version you want to use
       - run: go version
 
       - name: Build
@@ -37,12 +55,12 @@ jobs:
           # GOOS: target operating system
           # GOARCH: target architecture
           # CGO_ENABLED=0: Disable CGO for static linking (recommended for portability)
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-linux-amd64 ./cmd/goDirHasher/main.go 
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-windows-amd64.exe ./cmd/goDirHasher/main.go
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-darwin-amd64 ./cmd/goDirHasher/main.go
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-linux-arm64 ./cmd/goDirHasher/main.go
-          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-windows-arm64.exe ./cmd/goDirHasher/main.go
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o goDirHasher-darwin-arm64 ./cmd/goDirHasher/main.go
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o goDirHasher-linux-amd64 ./cmd/goDirHasher/main.go 
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o goDirHasher-windows-amd64.exe ./cmd/goDirHasher/main.go
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o goDirHasher-darwin-amd64 ./cmd/goDirHasher/main.go
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o goDirHasher-linux-arm64 ./cmd/goDirHasher/main.go
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o goDirHasher-windows-arm64.exe ./cmd/goDirHasher/main.go
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o goDirHasher-darwin-arm64 ./cmd/goDirHasher/main.go
 
       - name: Create Archives
         run: |
